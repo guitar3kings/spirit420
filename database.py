@@ -22,7 +22,8 @@ class Database:
                 username TEXT,
                 first_name TEXT,
                 last_name TEXT,
-                language TEXT DEFAULT 'ru',
+                language TEXT DEFAULT 'en',
+                accepted_disclaimer INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
@@ -31,46 +32,36 @@ class Database:
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS products (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name_ru TEXT NOT NULL,
-                name_en TEXT NOT NULL,
-                name_th TEXT NOT NULL,
+                name TEXT NOT NULL,
                 category TEXT NOT NULL,
+                product_type TEXT NOT NULL,
+                thc_content INTEGER NOT NULL,
                 price INTEGER NOT NULL,
-                description_ru TEXT,
-                description_en TEXT,
-                description_th TEXT,
-                is_active INTEGER DEFAULT 1
+                description TEXT,
+                special_offer TEXT,
+                is_active INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
-        # Orders table
+        # Stats table
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS orders (
+            CREATE TABLE IF NOT EXISTS stats (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER,
-                items TEXT NOT NULL,
-                address TEXT NOT NULL,
-                phone TEXT NOT NULL,
-                delivery_time TEXT NOT NULL,
-                comment TEXT,
-                delivery_zone TEXT NOT NULL,
-                delivery_cost INTEGER NOT NULL,
-                items_cost INTEGER NOT NULL,
-                total_cost INTEGER NOT NULL,
-                status TEXT DEFAULT 'new',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (user_id)
+                action TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
         conn.commit()
         conn.close()
         
-        # Add test products if database is empty
-        self.add_test_products()
+        # Add initial products if database is empty
+        self.add_initial_products()
     
-    def add_test_products(self):
-        """Add test products to catalog"""
+    def add_initial_products(self):
+        """Add initial product catalog"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
@@ -80,67 +71,42 @@ class Database:
             conn.close()
             return
         
-        test_products = [
-            # Black Tea
-            ('Английский завтрак', 'English Breakfast', 'อิงลิชเบรกฟาสต์', 'black', 280, 
-             'Классический крепкий черный чай для бодрого утра', 
-             'Classic strong black tea for an energetic morning',
-             'ชาดำแบบคลาสสิกสำหรับเช้าวันใหม่'),
-            ('Ассам', 'Assam', 'อัสสัม', 'black', 320,
-             'Насыщенный индийский чай с солодовыми нотами',
-             'Rich Indian tea with malty notes',
-             'ชาอินเดียเข้มข้นพร้อมกลิ่นมอลต์'),
-            ('Эрл Грей', 'Earl Grey', 'เอิร์ลเกรย์', 'black', 300,
-             'Чай с ароматом бергамота',
-             'Tea with bergamot flavor',
-             'ชาที่มีกลิ่นเบอร์กามอต'),
+        initial_products = [
+            # SORTS
+            ('Miami', 'sorts', 'sativa', 27, 250, '', ''),
+            ('Dosi Dos', 'sorts', 'indica', 27, 250, '', ''),
+            ('Frozen Joke', 'sorts', 'indica', 27, 250, '', ''),
+            ('Rainbow Inferno', 'sorts', 'sativa', 27, 300, '', ''),
+            ('LA', 'sorts', 'sativa', 24, 150, '', ''),
+            ('Super Boof', 'sorts', 'hybrid', 27, 300, '', ''),
+            ('Tropicana Chery', 'sorts', 'indica', 27, 300, '', ''),
+            ('Lemon Haze', 'sorts', 'sativa', 25, 150, '', ''),
+            ('Orange Haze', 'sorts', 'sativa', 27, 250, '', ''),
+            ('Diamond Runt', 'sorts', 'indica', 27, 250, '', ''),
             
-            # Green Tea
-            ('Сенча', 'Sencha', 'เซนฉะ', 'green', 350,
-             'Японский зеленый чай с травянистым вкусом',
-             'Japanese green tea with grassy flavor',
-             'ชาเขียวญี่ปุ่นรสหญ้า'),
-            ('Те Гуань Инь', 'Tie Guan Yin', 'เถกวนอิน', 'green', 420,
-             'Улун премиум класса с цветочным ароматом',
-             'Premium oolong with floral aroma',
-             'อู่หลงพรีเมียมที่มีกลิ่นหอมดอกไม้'),
-            ('Жасминовый', 'Jasmine', 'มะลิ', 'green', 280,
-             'Зеленый чай с цветками жасмина',
-             'Green tea with jasmine flowers',
-             'ชาเขียวกับดอกมะลิ'),
-            
-            # Mix
-            ('Масала чай', 'Masala Chai', 'มาซาลาชาย', 'mix', 340,
-             'Индийский пряный чай со специями',
-             'Indian spiced tea',
-             'ชาเครื่องเทศอินเดีย'),
-            ('Фруктовый микс', 'Fruit Mix', 'ผลไม้ผสม', 'mix', 290,
-             'Смесь сушеных ягод и фруктов',
-             'Mix of dried berries and fruits',
-             'ผลไม้แห้งและเบอร์รี่ผสม'),
-            ('Имбирь-лимон-мед', 'Ginger-Lemon-Honey', 'ขิง-มะนาว-น้ำผึ้ง', 'mix', 310,
-             'Согревающий напиток для здоровья',
-             'Warming drink for health',
-             'เครื่องดื่มอุ่นๆเพื่อสุขภาพ'),
+            # PREROLLED JOINTS
+            ('Frozen Joke', 'joints', 'indica', 27, 200, '1 pcs', ''),
+            ('Double Kush Cake', 'joints', 'hybrid', 26, 200, '1 pcs', ''),
+            ('Double Kush Cake', 'joints', 'sativa', 26, 100, '1 pcs', 'buy 3 get 4 special deal'),
         ]
         
         cursor.executemany('''
-            INSERT INTO products (name_ru, name_en, name_th, category, price, 
-                                 description_ru, description_en, description_th)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', test_products)
+            INSERT INTO products (name, category, product_type, thc_content, price, 
+                                 description, special_offer)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', initial_products)
         
         conn.commit()
         conn.close()
     
     # User Methods
-    def add_user(self, user_id, username, first_name, last_name, language='ru'):
+    def add_user(self, user_id, username, first_name, last_name, language='en'):
         """Add or update user"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
         cursor.execute('''
-            INSERT OR REPLACE INTO users (user_id, username, first_name, last_name, language)
+            INSERT OR IGNORE INTO users (user_id, username, first_name, last_name, language)
             VALUES (?, ?, ?, ?, ?)
         ''', (user_id, username, first_name, last_name, language))
         
@@ -156,7 +122,7 @@ class Database:
         result = cursor.fetchone()
         
         conn.close()
-        return result[0] if result else 'ru'
+        return result[0] if result else 'en'
     
     def set_user_language(self, user_id, language):
         """Set user's language preference"""
@@ -168,18 +134,65 @@ class Database:
         conn.commit()
         conn.close()
     
+    def accept_disclaimer(self, user_id):
+        """Mark user as accepted disclaimer"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('UPDATE users SET accepted_disclaimer = 1 WHERE user_id = ?', (user_id,))
+        
+        conn.commit()
+        conn.close()
+    
+    def has_accepted_disclaimer(self, user_id):
+        """Check if user accepted disclaimer"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT accepted_disclaimer FROM users WHERE user_id = ?', (user_id,))
+        result = cursor.fetchone()
+        
+        conn.close()
+        return result and result[0] == 1
+    
     # Product Methods
     def get_products_by_category(self, category):
-        """Get all products in a category"""
+        """Get all active products in a category"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT id, name_ru, name_en, name_th, price, 
-                   description_ru, description_en, description_th
+            SELECT id, name, product_type, thc_content, price, description, special_offer
             FROM products
             WHERE category = ? AND is_active = 1
+            ORDER BY price DESC, name
         ''', (category,))
+        
+        products = cursor.fetchall()
+        conn.close()
+        
+        return products
+    
+    def get_all_products(self, include_hidden=False):
+        """Get all products (for admin)"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        if include_hidden:
+            cursor.execute('''
+                SELECT id, name, category, product_type, thc_content, price, 
+                       description, special_offer, is_active
+                FROM products
+                ORDER BY category, name
+            ''')
+        else:
+            cursor.execute('''
+                SELECT id, name, category, product_type, thc_content, price, 
+                       description, special_offer, is_active
+                FROM products
+                WHERE is_active = 1
+                ORDER BY category, name
+            ''')
         
         products = cursor.fetchall()
         conn.close()
@@ -192,10 +205,10 @@ class Database:
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT id, name_ru, name_en, name_th, price,
-                   description_ru, description_en, description_th
+            SELECT id, name, category, product_type, thc_content, price,
+                   description, special_offer, is_active
             FROM products
-            WHERE id = ? AND is_active = 1
+            WHERE id = ?
         ''', (product_id,))
         
         product = cursor.fetchone()
@@ -203,77 +216,105 @@ class Database:
         
         return product
     
-    # Order Methods
-    def create_order(self, user_id, items, address, phone, delivery_time, 
-                    comment, delivery_zone, delivery_cost, items_cost):
-        """Create new order"""
+    def add_product(self, name, category, product_type, thc_content, price, description='', special_offer=''):
+        """Add new product"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
-        total_cost = items_cost + delivery_cost
-        items_json = json.dumps(items, ensure_ascii=False)
-        
         cursor.execute('''
-            INSERT INTO orders (user_id, items, address, phone, delivery_time,
-                              comment, delivery_zone, delivery_cost, items_cost, total_cost)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (user_id, items_json, address, phone, delivery_time, 
-              comment, delivery_zone, delivery_cost, items_cost, total_cost))
+            INSERT INTO products (name, category, product_type, thc_content, price, 
+                                 description, special_offer)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (name, category, product_type, thc_content, price, description, special_offer))
         
-        order_id = cursor.lastrowid
+        product_id = cursor.lastrowid
         
         conn.commit()
         conn.close()
         
-        return order_id
+        return product_id
     
-    def get_user_orders(self, user_id):
-        """Get all orders for a user"""
+    def update_product(self, product_id, name, category, product_type, thc_content, price, 
+                      description='', special_offer=''):
+        """Update product"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT id, items, status, total_cost, created_at
-            FROM orders
-            WHERE user_id = ?
-            ORDER BY created_at DESC
-        ''', (user_id,))
-        
-        orders = cursor.fetchall()
-        conn.close()
-        
-        return orders
-    
-    def get_order(self, order_id):
-        """Get order by ID"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT id, user_id, items, address, phone, delivery_time, comment,
-                   delivery_zone, delivery_cost, items_cost, total_cost, status, created_at
-            FROM orders
+            UPDATE products 
+            SET name = ?, category = ?, product_type = ?, thc_content = ?, 
+                price = ?, description = ?, special_offer = ?
             WHERE id = ?
-        ''', (order_id,))
-        
-        order = cursor.fetchone()
-        conn.close()
-        
-        return order
-    
-    def update_order_status(self, order_id, status):
-        """Update order status"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('UPDATE orders SET status = ? WHERE id = ?', (status, order_id))
+        ''', (name, category, product_type, thc_content, price, description, special_offer, product_id))
         
         conn.commit()
         conn.close()
     
-    def cancel_order(self, order_id):
-        """Cancel order"""
-        self.update_order_status(order_id, 'cancelled')
+    def delete_product(self, product_id):
+        """Delete product"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('DELETE FROM products WHERE id = ?', (product_id,))
+        
+        conn.commit()
+        conn.close()
+    
+    def toggle_product_visibility(self, product_id):
+        """Toggle product visibility"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT is_active FROM products WHERE id = ?', (product_id,))
+        current = cursor.fetchone()[0]
+        new_status = 0 if current == 1 else 1
+        
+        cursor.execute('UPDATE products SET is_active = ? WHERE id = ?', (new_status, product_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return new_status
+    
+    # Stats Methods
+    def log_action(self, user_id, action):
+        """Log user action"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('INSERT INTO stats (user_id, action) VALUES (?, ?)', (user_id, action))
+        
+        conn.commit()
+        conn.close()
+    
+    def get_stats(self):
+        """Get basic statistics"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # Total users
+        cursor.execute('SELECT COUNT(*) FROM users')
+        users = cursor.fetchone()[0]
+        
+        # Total products
+        cursor.execute('SELECT COUNT(*) FROM products WHERE is_active = 1')
+        products = cursor.fetchone()[0]
+        
+        # Catalog views today
+        cursor.execute('''
+            SELECT COUNT(*) FROM stats 
+            WHERE action = "catalog_view" 
+            AND DATE(created_at) = DATE('now')
+        ''')
+        views = cursor.fetchone()[0]
+        
+        conn.close()
+        
+        return {
+            'users': users,
+            'products': products,
+            'views': views
+        }
 
 # Initialize database
 db = Database()

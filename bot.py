@@ -1,9 +1,7 @@
 import logging
-import json
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (Application, CommandHandler, MessageHandler, 
                          CallbackQueryHandler, ContextTypes, filters, ConversationHandler)
-from datetime import datetime
 
 from config import *
 from texts import get_text
@@ -16,22 +14,26 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Conversation states
-(SELECTING_ACTION, SELECTING_CATEGORY, ORDERING_ITEM, SELECTING_ZONE,
- ENTERING_ADDRESS, ENTERING_PHONE, SELECTING_TIME, ENTERING_COMMENT) = range(8)
+# Conversation states for admin
+(ADMIN_ADD_NAME, ADMIN_ADD_CATEGORY, ADMIN_ADD_TYPE, ADMIN_ADD_THC,
+ ADMIN_ADD_PRICE, ADMIN_ADD_DESC, ADMIN_ADD_SPECIAL) = range(7)
 
 # Helper Functions
 def get_user_lang(update: Update) -> str:
     """Get user's language preference"""
     return db.get_user_language(update.effective_user.id)
 
+def is_admin(user_id: int) -> bool:
+    """Check if user is admin"""
+    return user_id in [ADMIN_ID, OWNER_ID]
+
 def get_main_keyboard(lang: str):
     """Generate main menu keyboard"""
     keyboard = [
         [InlineKeyboardButton(get_text(lang, 'catalog'), callback_data='catalog')],
-        [InlineKeyboardButton(get_text(lang, 'order'), callback_data='order')],
-        [InlineKeyboardButton(get_text(lang, 'my_orders'), callback_data='my_orders')],
         [InlineKeyboardButton(get_text(lang, 'info'), callback_data='info')],
+        [InlineKeyboardButton(get_text(lang, 'legal'), callback_data='legal')],
+        [InlineKeyboardButton(get_text(lang, 'contacts'), callback_data='contacts')],
         [InlineKeyboardButton(get_text(lang, 'language'), callback_data='language')]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -39,9 +41,8 @@ def get_main_keyboard(lang: str):
 def get_category_keyboard(lang: str):
     """Generate category selection keyboard"""
     keyboard = [
-        [InlineKeyboardButton(get_text(lang, 'black_tea'), callback_data='cat_black')],
-        [InlineKeyboardButton(get_text(lang, 'green_tea'), callback_data='cat_green')],
-        [InlineKeyboardButton(get_text(lang, 'mix_tea'), callback_data='cat_mix')],
+        [InlineKeyboardButton(get_text(lang, 'sorts'), callback_data='cat_sorts')],
+        [InlineKeyboardButton(get_text(lang, 'joints'), callback_data='cat_joints')],
         [InlineKeyboardButton(get_text(lang, 'back'), callback_data='main_menu')]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -55,23 +56,25 @@ def get_language_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-def format_product_name(product, lang):
-    """Get product name in user's language"""
-    if lang == 'ru':
-        return product[1]
-    elif lang == 'en':
-        return product[2]
-    else:
-        return product[3]
-
-def format_product_description(product, lang):
-    """Get product description in user's language"""
-    if lang == 'ru':
-        return product[5]
-    elif lang == 'en':
-        return product[6]
-    else:
-        return product[7]
+def format_product_card(product, lang):
+    """Format product information"""
+    product_id, name, product_type, thc, price, description, special = product
+    
+    type_info = PRODUCT_TYPES.get(product_type, {})
+    type_emoji = type_info.get('emoji', '🌿')
+    type_name = type_info.get(lang, product_type)
+    
+    special_text = f"🎁 {special}" if special else ""
+    desc_text = description if description else ""
+    
+    return get_text(lang, 'product_card',
+                   name=name,
+                   type_emoji=type_emoji,
+                   type=type_name,
+                   thc=thc,
+                   price=price,
+                   special=special_text,
+                   description=desc_text)
 
 # Command Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -81,12 +84,59 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Add user to database
     db.add_user(user.id, user.username, user.first_name, user.last_name)
     
+    # Check if user accepted disclaimer
+    if not db.has_accepted_disclaimer(user.id):
+        return await show_disclaimer(update, context)
+    
     lang = get_user_lang(update)
     
     await update.message.reply_text(
         get_text(lang, 'welcome'),
         reply_markup=get_main_keyboard(lang)
     )
+
+async def show_disclaimer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show age disclaimer"""
+    lang = get_user_lang(update)
+    
+    keyboard = [
+        [InlineKeyboardButton(get_text(lang, 'accept_disclaimer'), callback_data='accept_disclaimer')],
+        [InlineKeyboardButton(get_text(lang, 'decline_disclaimer'), callback_data='decline_disclaimer')]
+    ]
+    
+    if update.message:
+        await update.message.reply_text(
+            get_text(lang, 'disclaimer'),
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    else:
+        await update.callback_query.edit_message_text(
+            get_text(lang, 'disclaimer'),
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+async def accept_disclaimer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """User accepted disclaimer"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = update.effective_user.id
+    db.accept_disclaimer(user_id)
+    
+    lang = get_user_lang(update)
+    
+    await query.edit_message_text(
+        get_text(lang, 'welcome'),
+        reply_markup=get_main_keyboard(lang)
+    )
+
+async def decline_disclaimer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """User declined disclaimer"""
+    query = update.callback_query
+    await query.answer()
+    
+    lang = get_user_lang(update)
+    await query.edit_message_text(get_text(lang, 'disclaimer_declined'))
 
 async def main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show main menu"""
@@ -106,10 +156,14 @@ async def show_catalog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
+    user_id = update.effective_user.id
     lang = get_user_lang(update)
     
+    # Log catalog view
+    db.log_action(user_id, 'catalog_view')
+    
     await query.edit_message_text(
-        get_text(lang, 'select_category'),
+        get_text(lang, 'catalog_disclaimer') + '\n\n' + get_text(lang, 'select_category'),
         reply_markup=get_category_keyboard(lang)
     )
 
@@ -119,7 +173,7 @@ async def show_category_products(update: Update, context: ContextTypes.DEFAULT_T
     await query.answer()
     
     lang = get_user_lang(update)
-    category = query.data.split('_')[1]  # cat_black -> black
+    category = query.data.split('_')[1]  # cat_sorts -> sorts
     
     products = db.get_products_by_category(category)
     
@@ -133,19 +187,12 @@ async def show_category_products(update: Update, context: ContextTypes.DEFAULT_T
         return
     
     # Show products list
+    category_name = CATEGORIES[category][lang]
+    await query.edit_message_text(f"{category_name}\n\n{get_text(lang, 'catalog_disclaimer')}")
+    
     for product in products:
-        name = format_product_name(product, lang)
-        description = format_product_description(product, lang)
-        price = product[4]
-        
-        text = get_text(lang, 'product_info', name=name, price=price, description=description)
-        
-        keyboard = [
-            [InlineKeyboardButton(get_text(lang, 'order_this'), 
-                                callback_data=f'order_product_{product[0]}')]
-        ]
-        
-        await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        text = format_product_card(product, lang)
+        await query.message.reply_text(text)
     
     # Back button
     await query.message.reply_text(
@@ -155,440 +202,6 @@ async def show_category_products(update: Update, context: ContextTypes.DEFAULT_T
         ]])
     )
 
-# Order Handlers
-async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start order process"""
-    query = update.callback_query
-    if query:
-        await query.answer()
-    
-    lang = get_user_lang(update)
-    
-    # Initialize order data
-    context.user_data['order'] = {}
-    
-    keyboard = [[InlineKeyboardButton(get_text(lang, 'select_from_catalog'), callback_data='catalog')]]
-    
-    if query:
-        await query.edit_message_text(
-            get_text(lang, 'order_start'),
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-    else:
-        await update.message.reply_text(
-            get_text(lang, 'order_start'),
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-    
-    return ORDERING_ITEM
-
-async def order_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Add product to order"""
-    query = update.callback_query
-    await query.answer()
-    
-    product_id = int(query.data.split('_')[2])
-    product = db.get_product(product_id)
-    
-    lang = get_user_lang(update)
-    name = format_product_name(product, lang)
-    
-    # Save to order
-    if 'order' not in context.user_data:
-        context.user_data['order'] = {}
-    
-    context.user_data['order']['items'] = [{'name': name, 'price': product[4]}]
-    context.user_data['order']['items_cost'] = product[4]
-    
-    await query.message.reply_text(get_text(lang, 'order_added', item=name))
-    
-    # Ask for delivery zone
-    return await ask_delivery_zone(update, context)
-
-async def order_item_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle text input for order item"""
-    item_text = update.message.text
-    lang = get_user_lang(update)
-    
-    # Save item (we'll parse price later or set default)
-    if 'order' not in context.user_data:
-        context.user_data['order'] = {}
-    
-    context.user_data['order']['items'] = [{'name': item_text, 'price': 300}]
-    context.user_data['order']['items_cost'] = 300
-    
-    await update.message.reply_text(get_text(lang, 'order_added', item=item_text))
-    
-    return await ask_delivery_zone(update, context)
-
-async def ask_delivery_zone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Ask for delivery zone"""
-    lang = get_user_lang(update)
-    
-    keyboard = []
-    for zone_id, zone_data in DELIVERY_ZONES.items():
-        zone_name = zone_data[f'name_{lang}']
-        price = zone_data['price']
-        keyboard.append([InlineKeyboardButton(
-            f"{zone_name} - ฿{price}", 
-            callback_data=f'zone_{zone_id}'
-        )])
-    
-    if update.callback_query:
-        await update.callback_query.message.reply_text(
-            get_text(lang, 'enter_zone'),
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-    else:
-        await update.message.reply_text(
-            get_text(lang, 'enter_zone'),
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-    
-    return SELECTING_ZONE
-
-async def select_zone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle zone selection"""
-    query = update.callback_query
-    await query.answer()
-    
-    zone_id = query.data.split('_')[1]
-    zone_data = DELIVERY_ZONES[zone_id]
-    
-    context.user_data['order']['delivery_zone'] = zone_id
-    context.user_data['order']['delivery_cost'] = zone_data['price']
-    
-    lang = get_user_lang(update)
-    
-    # Confirm delivery cost
-    keyboard = [
-        [InlineKeyboardButton(get_text(lang, 'yes'), callback_data='confirm_zone')],
-        [InlineKeyboardButton(get_text(lang, 'no'), callback_data='order')]
-    ]
-    
-    await query.edit_message_text(
-        get_text(lang, 'delivery_cost', cost=zone_data['price']),
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-    
-    return SELECTING_ZONE
-
-async def confirm_zone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Confirm zone and ask for address"""
-    query = update.callback_query
-    await query.answer()
-    
-    lang = get_user_lang(update)
-    
-    keyboard = [[KeyboardButton(get_text(lang, 'send_location'), request_location=True)]]
-    
-    await query.message.reply_text(
-        get_text(lang, 'enter_address'),
-        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
-    )
-    
-    return ENTERING_ADDRESS
-
-async def receive_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Receive address (text or location)"""
-    lang = get_user_lang(update)
-    
-    if update.message.location:
-        lat = update.message.location.latitude
-        lon = update.message.location.longitude
-        address = f"📍 Геолокация: {lat}, {lon}"
-    else:
-        address = update.message.text
-    
-    context.user_data['order']['address'] = address
-    
-    keyboard = [[KeyboardButton(get_text(lang, 'share_phone'), request_contact=True)]]
-    
-    await update.message.reply_text(
-        get_text(lang, 'enter_phone'),
-        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
-    )
-    
-    return ENTERING_PHONE
-
-async def receive_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Receive phone number"""
-    lang = get_user_lang(update)
-    
-    if update.message.contact:
-        phone = update.message.contact.phone_number
-    else:
-        phone = update.message.text
-    
-    context.user_data['order']['phone'] = phone
-    
-    # Ask for delivery time
-    keyboard = [
-        [InlineKeyboardButton(get_text(lang, 'today_afternoon'), callback_data='time_today_afternoon')],
-        [InlineKeyboardButton(get_text(lang, 'today_evening'), callback_data='time_today_evening')],
-        [InlineKeyboardButton(get_text(lang, 'tomorrow_morning'), callback_data='time_tomorrow_morning')],
-        [InlineKeyboardButton(get_text(lang, 'tomorrow_afternoon'), callback_data='time_tomorrow_afternoon')],
-        [InlineKeyboardButton(get_text(lang, 'tomorrow_evening'), callback_data='time_tomorrow_evening')],
-        [InlineKeyboardButton(get_text(lang, 'other_time'), callback_data='time_other')]
-    ]
-    
-    await update.message.reply_text(
-        get_text(lang, 'select_time'),
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-    
-    return SELECTING_TIME
-
-async def select_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle time selection"""
-    query = update.callback_query
-    await query.answer()
-    
-    time_key = query.data.split('_', 1)[1]
-    lang = get_user_lang(update)
-    
-    if time_key == 'other':
-        await query.edit_message_text(get_text(lang, 'enter_other_time'))
-        return SELECTING_TIME
-    
-    context.user_data['order']['delivery_time'] = get_text(lang, f'time_{time_key}')
-    
-    # Ask for comment
-    keyboard = [[InlineKeyboardButton(get_text(lang, 'skip'), callback_data='skip_comment')]]
-    
-    await query.edit_message_text(
-        get_text(lang, 'enter_comment'),
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-    
-    return ENTERING_COMMENT
-
-async def receive_time_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Receive custom time as text"""
-    context.user_data['order']['delivery_time'] = update.message.text
-    
-    lang = get_user_lang(update)
-    keyboard = [[InlineKeyboardButton(get_text(lang, 'skip'), callback_data='skip_comment')]]
-    
-    await update.message.reply_text(
-        get_text(lang, 'enter_comment'),
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-    
-    return ENTERING_COMMENT
-
-async def receive_comment(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Receive order comment"""
-    if update.callback_query:
-        query = update.callback_query
-        await query.answer()
-        comment = get_text(get_user_lang(update), 'skip')
-    else:
-        comment = update.message.text
-    
-    context.user_data['order']['comment'] = comment
-    
-    return await show_order_confirmation(update, context)
-
-async def show_order_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show order confirmation"""
-    lang = get_user_lang(update)
-    order = context.user_data['order']
-    
-    # Format items
-    items_text = '\n'.join([f"• {item['name']} - ฿{item['price']}" 
-                           for item in order['items']])
-    
-    # Create temporary order ID
-    order_id = '---'
-    
-    total = order['items_cost'] + order['delivery_cost']
-    
-    text = get_text(lang, 'order_confirmation',
-                   order_id=order_id,
-                   items=items_text,
-                   address=order['address'],
-                   phone=order['phone'],
-                   time=order['delivery_time'],
-                   comment=order.get('comment', '-'),
-                   items_cost=order['items_cost'],
-                   delivery_cost=order['delivery_cost'],
-                   total=total)
-    
-    keyboard = [
-        [InlineKeyboardButton(get_text(lang, 'confirm_order'), callback_data='confirm_order')],
-        [InlineKeyboardButton(get_text(lang, 'edit_order'), callback_data='order')]
-    ]
-    
-    if update.callback_query:
-        await update.callback_query.message.reply_text(
-            text, 
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-    else:
-        await update.message.reply_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-    
-    return ENTERING_COMMENT
-
-async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Confirm and save order"""
-    query = update.callback_query
-    await query.answer()
-    
-    order_data = context.user_data['order']
-    user_id = update.effective_user.id
-    lang = get_user_lang(update)
-    
-    # Save order to database
-    order_id = db.create_order(
-        user_id=user_id,
-        items=order_data['items'],
-        address=order_data['address'],
-        phone=order_data['phone'],
-        delivery_time=order_data['delivery_time'],
-        comment=order_data.get('comment', ''),
-        delivery_zone=order_data['delivery_zone'],
-        delivery_cost=order_data['delivery_cost'],
-        items_cost=order_data['items_cost']
-    )
-    
-    # Notify user
-    await query.edit_message_text(
-        get_text(lang, 'order_success', order_id=order_id),
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton(get_text(lang, 'main_menu'), callback_data='main_menu')
-        ]])
-    )
-    
-    # Notify admin
-    items_text = '\n'.join([f"• {item['name']} - ฿{item['price']}" 
-                           for item in order_data['items']])
-    
-    user = update.effective_user
-    user_info = f"@{user.username}" if user.username else f"{user.first_name}"
-    
-    total = order_data['items_cost'] + order_data['delivery_cost']
-    
-    admin_text = get_text('ru', 'new_order_admin',
-                         order_id=order_id,
-                         user=user_info,
-                         phone=order_data['phone'],
-                         items=items_text,
-                         address=order_data['address'],
-                         time=order_data['delivery_time'],
-                         comment=order_data.get('comment', '-'),
-                         total=total)
-    
-    keyboard = [
-        [InlineKeyboardButton('✅ Подтвердить', callback_data=f'admin_confirm_{order_id}')],
-        [InlineKeyboardButton('❌ Отменить', callback_data=f'admin_cancel_{order_id}')]
-    ]
-    
-    await context.bot.send_message(
-        chat_id=ADMIN_ID,
-        text=admin_text,
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-    
-    # Clear order data
-    context.user_data.pop('order', None)
-    
-    return ConversationHandler.END
-
-# My Orders Handlers
-async def show_my_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show user's orders"""
-    query = update.callback_query
-    await query.answer()
-    
-    user_id = update.effective_user.id
-    lang = get_user_lang(update)
-    
-    orders = db.get_user_orders(user_id)
-    
-    if not orders:
-        await query.edit_message_text(
-            get_text(lang, 'my_orders_empty'),
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton(get_text(lang, 'back'), callback_data='main_menu')
-            ]])
-        )
-        return
-    
-    await query.edit_message_text(get_text(lang, 'my_orders_list'))
-    
-    for order in orders:
-        order_id = order[0]
-        items = json.loads(order[1])
-        status = order[2]
-        total = order[3]
-        date = order[4]
-        
-        items_text = ', '.join([item['name'] for item in items])
-        status_info = ORDER_STATUS[status]
-        status_text = f"{status_info['emoji']} {status_info[lang]}"
-        
-        text = get_text(lang, 'order_item',
-                       order_id=order_id,
-                       status=status_text,
-                       date=date,
-                       items=items_text,
-                       total=total)
-        
-        keyboard = [[InlineKeyboardButton(
-            get_text(lang, 'view_details'), 
-            callback_data=f'order_details_{order_id}'
-        )]]
-        
-        await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
-    
-    await query.message.reply_text(
-        '—',
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton(get_text(lang, 'back'), callback_data='main_menu')
-        ]])
-    )
-
-async def show_order_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show detailed order information"""
-    query = update.callback_query
-    await query.answer()
-    
-    order_id = int(query.data.split('_')[2])
-    order = db.get_order(order_id)
-    
-    if not order:
-        await query.answer(get_text(get_user_lang(update), 'error'), show_alert=True)
-        return
-    
-    lang = get_user_lang(update)
-    
-    items = json.loads(order[2])
-    items_text = '\n'.join([f"• {item['name']} - ฿{item['price']}" for item in items])
-    
-    status_info = ORDER_STATUS[order[11]]
-    
-    text = get_text(lang, 'order_details',
-                   order_id=order[0],
-                   status_emoji=status_info['emoji'],
-                   status=status_info[lang],
-                   date=order[12],
-                   items=items_text,
-                   address=order[3],
-                   phone=order[4],
-                   time=order[5],
-                   comment=order[6] or '-',
-                   items_cost=order[9],
-                   delivery_cost=order[8],
-                   total=order[10])
-    
-    keyboard = [[InlineKeyboardButton(get_text(lang, 'back'), callback_data='my_orders')]]
-    
-    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
-
 # Shop Info Handler
 async def show_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show shop information"""
@@ -597,13 +210,23 @@ async def show_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     lang = get_user_lang(update)
     
-    address = SHOP_ADDRESS_RU if lang == 'ru' else (SHOP_ADDRESS_EN if lang == 'en' else SHOP_ADDRESS_TH)
-    hours = WORKING_HOURS_RU if lang == 'ru' else (WORKING_HOURS_EN if lang == 'en' else WORKING_HOURS_TH)
+    if lang == 'ru':
+        address = SHOP_ADDRESS_RU
+        hours = WORKING_HOURS_RU
+        license_info = LICENSE_INFO_RU
+    elif lang == 'en':
+        address = SHOP_ADDRESS_EN
+        hours = WORKING_HOURS_EN
+        license_info = LICENSE_INFO_EN
+    else:
+        address = SHOP_ADDRESS_TH
+        hours = WORKING_HOURS_TH
+        license_info = LICENSE_INFO_TH
     
     text = get_text(lang, 'shop_info',
                    address=address,
                    hours=hours,
-                   phone=SHOP_PHONE)
+                   license=license_info)
     
     keyboard = [
         [InlineKeyboardButton(get_text(lang, 'show_map'), callback_data='show_map')],
@@ -627,6 +250,43 @@ async def show_map(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]])
     )
 
+# Legal Info Handler
+async def show_legal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show legal information"""
+    query = update.callback_query
+    await query.answer()
+    
+    lang = get_user_lang(update)
+    
+    keyboard = [[InlineKeyboardButton(get_text(lang, 'back'), callback_data='main_menu')]]
+    
+    await query.edit_message_text(
+        get_text(lang, 'legal_info'),
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+# Contacts Handler
+async def show_contacts(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show contact information"""
+    query = update.callback_query
+    await query.answer()
+    
+    lang = get_user_lang(update)
+    
+    text = get_text(lang, 'contacts_info',
+                   phone=SHOP_PHONE,
+                   line=LINE_ID,
+                   whatsapp=WHATSAPP)
+    
+    keyboard = [
+        [InlineKeyboardButton(get_text(lang, 'contact_line'), url=f'https://line.me/ti/p/{LINE_ID}')],
+        [InlineKeyboardButton(get_text(lang, 'contact_whatsapp'), url=f'https://wa.me/{WHATSAPP.replace("+", "")}')],
+        [InlineKeyboardButton(get_text(lang, 'contact_phone'), url=f'tel:{SHOP_PHONE}')],
+        [InlineKeyboardButton(get_text(lang, 'back'), callback_data='main_menu')]
+    ]
+    
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+
 # Language Handler
 async def show_language_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show language selection"""
@@ -634,7 +294,7 @@ async def show_language_selection(update: Update, context: ContextTypes.DEFAULT_
     await query.answer()
     
     await query.edit_message_text(
-        get_text('ru', 'select_language'),
+        get_text('en', 'select_language'),
         reply_markup=get_language_keyboard()
     )
 
@@ -651,40 +311,277 @@ async def change_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=get_main_keyboard(new_lang)
     )
 
-# Admin Handlers
-async def admin_confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin confirms order"""
+# Admin Panel
+async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show admin panel"""
+    user_id = update.effective_user.id
+    
+    if not is_admin(user_id):
+        await update.message.reply_text(get_text(get_user_lang(update), 'access_denied'))
+        return
+    
+    lang = get_user_lang(update)
+    
+    keyboard = [
+        [InlineKeyboardButton(get_text(lang, 'add_product'), callback_data='admin_add')],
+        [InlineKeyboardButton(get_text(lang, 'edit_product'), callback_data='admin_edit')],
+        [InlineKeyboardButton(get_text(lang, 'delete_product'), callback_data='admin_delete')],
+        [InlineKeyboardButton(get_text(lang, 'toggle_product'), callback_data='admin_toggle')],
+        [InlineKeyboardButton(get_text(lang, 'view_stats'), callback_data='admin_stats')],
+        [InlineKeyboardButton(get_text(lang, 'back'), callback_data='main_menu')]
+    ]
+    
+    if update.message:
+        await update.message.reply_text(
+            get_text(lang, 'admin_menu'),
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    else:
+        await update.callback_query.edit_message_text(
+            get_text(lang, 'admin_menu'),
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show statistics"""
     query = update.callback_query
     await query.answer()
     
-    order_id = int(query.data.split('_')[2])
-    db.update_order_status(order_id, 'confirmed')
+    if not is_admin(update.effective_user.id):
+        await query.answer(get_text(get_user_lang(update), 'access_denied'), show_alert=True)
+        return
+    
+    lang = get_user_lang(update)
+    stats = db.get_stats()
+    
+    text = get_text(lang, 'stats',
+                   users=stats['users'],
+                   products=stats['products'],
+                   views=stats['views'])
+    
+    keyboard = [[InlineKeyboardButton(get_text(lang, 'back'), callback_data='admin')]]
+    
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def admin_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Toggle product visibility"""
+    query = update.callback_query
+    await query.answer()
+    
+    if not is_admin(update.effective_user.id):
+        return
+    
+    lang = get_user_lang(update)
+    
+    products = db.get_all_products(include_hidden=True)
+    
+    keyboard = []
+    for p in products:
+        status = '✅' if p[8] else '❌'
+        keyboard.append([InlineKeyboardButton(
+            f"{status} {p[1]} ({p[2]})",
+            callback_data=f'toggle_{p[0]}'
+        )])
+    
+    keyboard.append([InlineKeyboardButton(get_text(lang, 'back'), callback_data='admin')])
     
     await query.edit_message_text(
-        f"✅ Заказ #{order_id} подтвержден",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton('📦 В обработку', callback_data=f'admin_prepare_{order_id}')
-        ]])
+        get_text(lang, 'select_product_to_toggle'),
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-async def admin_cancel_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin cancels order"""
+async def toggle_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Toggle specific product"""
     query = update.callback_query
     await query.answer()
     
-    order_id = int(query.data.split('_')[2])
-    db.cancel_order(order_id)
+    product_id = int(query.data.split('_')[1])
+    new_status = db.toggle_product_visibility(product_id)
     
-    await query.edit_message_text(f"❌ Заказ #{order_id} отменен")
-
-# Cancel handler
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Cancel conversation"""
     lang = get_user_lang(update)
-    await update.message.reply_text(
-        get_text(lang, 'order_cancelled'),
-        reply_markup=get_main_keyboard(lang)
+    status_text = get_text(lang, 'product_visible' if new_status else 'product_hidden')
+    
+    await query.answer(status_text, show_alert=True)
+    await admin_toggle(update, context)
+
+async def admin_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Delete product"""
+    query = update.callback_query
+    await query.answer()
+    
+    if not is_admin(update.effective_user.id):
+        return
+    
+    lang = get_user_lang(update)
+    
+    products = db.get_all_products(include_hidden=True)
+    
+    keyboard = []
+    for p in products:
+        keyboard.append([InlineKeyboardButton(
+            f"{p[1]} ({p[2]}, ฿{p[5]})",
+            callback_data=f'delete_{p[0]}'
+        )])
+    
+    keyboard.append([InlineKeyboardButton(get_text(lang, 'back'), callback_data='admin')])
+    
+    await query.edit_message_text(
+        get_text(lang, 'select_product_to_delete'),
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
+
+async def delete_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Delete specific product"""
+    query = update.callback_query
+    await query.answer()
+    
+    product_id = int(query.data.split('_')[1])
+    db.delete_product(product_id)
+    
+    lang = get_user_lang(update)
+    await query.answer(get_text(lang, 'product_deleted'), show_alert=True)
+    
+    await admin_panel(update, context)
+
+# Add Product Conversation
+async def admin_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Start adding product"""
+    query = update.callback_query
+    await query.answer()
+    
+    if not is_admin(update.effective_user.id):
+        return
+    
+    lang = get_user_lang(update)
+    await query.edit_message_text(get_text(lang, 'enter_product_name'))
+    
+    return ADMIN_ADD_NAME
+
+async def admin_add_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Receive product name"""
+    context.user_data['new_product'] = {'name': update.message.text}
+    
+    lang = get_user_lang(update)
+    
+    keyboard = [
+        [InlineKeyboardButton(get_text(lang, 'sorts'), callback_data='addcat_sorts')],
+        [InlineKeyboardButton(get_text(lang, 'joints'), callback_data='addcat_joints')]
+    ]
+    
+    await update.message.reply_text(
+        get_text(lang, 'select_product_category'),
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    
+    return ADMIN_ADD_CATEGORY
+
+async def admin_add_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Receive category"""
+    query = update.callback_query
+    await query.answer()
+    
+    category = query.data.split('_')[1]
+    context.user_data['new_product']['category'] = category
+    
+    lang = get_user_lang(update)
+    
+    keyboard = [
+        [InlineKeyboardButton('☀️ Sativa', callback_data='addtype_sativa')],
+        [InlineKeyboardButton('🌙 Indica', callback_data='addtype_indica')],
+        [InlineKeyboardButton('🌓 Hybrid', callback_data='addtype_hybrid')]
+    ]
+    
+    await query.edit_message_text(
+        get_text(lang, 'select_product_type'),
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    
+    return ADMIN_ADD_TYPE
+
+async def admin_add_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Receive type"""
+    query = update.callback_query
+    await query.answer()
+    
+    product_type = query.data.split('_')[1]
+    context.user_data['new_product']['type'] = product_type
+    
+    lang = get_user_lang(update)
+    await query.edit_message_text(get_text(lang, 'enter_thc_content'))
+    
+    return ADMIN_ADD_THC
+
+async def admin_add_thc(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Receive THC content"""
+    try:
+        thc = int(update.message.text)
+        context.user_data['new_product']['thc'] = thc
+        
+        lang = get_user_lang(update)
+        await update.message.reply_text(get_text(lang, 'enter_price'))
+        
+        return ADMIN_ADD_PRICE
+    except:
+        lang = get_user_lang(update)
+        await update.message.reply_text(get_text(lang, 'invalid_number'))
+        return ADMIN_ADD_THC
+
+async def admin_add_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Receive price"""
+    try:
+        price = int(update.message.text)
+        context.user_data['new_product']['price'] = price
+        
+        lang = get_user_lang(update)
+        await update.message.reply_text(get_text(lang, 'enter_description'))
+        
+        return ADMIN_ADD_DESC
+    except:
+        lang = get_user_lang(update)
+        await update.message.reply_text(get_text(lang, 'invalid_number'))
+        return ADMIN_ADD_PRICE
+
+async def admin_add_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Receive description"""
+    desc = update.message.text if update.message.text != '/skip' else ''
+    context.user_data['new_product']['description'] = desc
+    
+    lang = get_user_lang(update)
+    await update.message.reply_text(get_text(lang, 'enter_special_offer'))
+    
+    return ADMIN_ADD_SPECIAL
+
+async def admin_add_special(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Receive special offer and save product"""
+    special = update.message.text if update.message.text != '/skip' else ''
+    product = context.user_data['new_product']
+    
+    db.add_product(
+        name=product['name'],
+        category=product['category'],
+        product_type=product['type'],
+        thc_content=product['thc'],
+        price=product['price'],
+        description=product.get('description', ''),
+        special_offer=special
+    )
+    
+    lang = get_user_lang(update)
+    await update.message.reply_text(get_text(lang, 'product_added'))
+    
+    # Clear data
+    context.user_data.pop('new_product', None)
+    
+    # Show admin menu
+    keyboard = [[InlineKeyboardButton(get_text(lang, 'admin_panel'), callback_data='admin')]]
+    await update.message.reply_text('—', reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    return ConversationHandler.END
+
+async def cancel_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Cancel admin operation"""
+    context.user_data.pop('new_product', None)
+    await admin_panel(update, context)
     return ConversationHandler.END
 
 def main():
@@ -692,54 +589,45 @@ def main():
     # Create application
     application = Application.builder().token(BOT_TOKEN).build()
     
-    # Order conversation handler
-    order_conv = ConversationHandler(
-        entry_points=[
-            CallbackQueryHandler(start_order, pattern='^order$'),
-            CallbackQueryHandler(order_product, pattern='^order_product_')
-        ],
+    # Add product conversation handler
+    add_product_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(admin_add_start, pattern='^admin_add$')],
         states={
-            ORDERING_ITEM: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, order_item_text),
-                CallbackQueryHandler(show_catalog, pattern='^catalog$')
-            ],
-            SELECTING_ZONE: [
-                CallbackQueryHandler(select_zone, pattern='^zone_'),
-                CallbackQueryHandler(confirm_zone, pattern='^confirm_zone$')
-            ],
-            ENTERING_ADDRESS: [
-                MessageHandler(filters.TEXT | filters.LOCATION, receive_address)
-            ],
-            ENTERING_PHONE: [
-                MessageHandler(filters.TEXT | filters.CONTACT, receive_phone)
-            ],
-            SELECTING_TIME: [
-                CallbackQueryHandler(select_time, pattern='^time_'),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_time_text)
-            ],
-            ENTERING_COMMENT: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_comment),
-                CallbackQueryHandler(receive_comment, pattern='^skip_comment$'),
-                CallbackQueryHandler(confirm_order, pattern='^confirm_order$')
-            ]
+            ADMIN_ADD_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_name)],
+            ADMIN_ADD_CATEGORY: [CallbackQueryHandler(admin_add_category, pattern='^addcat_')],
+            ADMIN_ADD_TYPE: [CallbackQueryHandler(admin_add_type, pattern='^addtype_')],
+            ADMIN_ADD_THC: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_thc)],
+            ADMIN_ADD_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_price)],
+            ADMIN_ADD_DESC: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_desc)],
+            ADMIN_ADD_SPECIAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_special)]
         },
-        fallbacks=[CommandHandler('cancel', cancel)]
+        fallbacks=[CommandHandler('cancel', cancel_admin)]
     )
     
     # Add handlers
     application.add_handler(CommandHandler('start', start))
-    application.add_handler(order_conv)
+    application.add_handler(CommandHandler('admin', admin_panel))
+    application.add_handler(add_product_conv)
+    
+    application.add_handler(CallbackQueryHandler(accept_disclaimer, pattern='^accept_disclaimer$'))
+    application.add_handler(CallbackQueryHandler(decline_disclaimer, pattern='^decline_disclaimer$'))
     application.add_handler(CallbackQueryHandler(main_menu, pattern='^main_menu$'))
     application.add_handler(CallbackQueryHandler(show_catalog, pattern='^catalog$'))
     application.add_handler(CallbackQueryHandler(show_category_products, pattern='^cat_'))
-    application.add_handler(CallbackQueryHandler(show_my_orders, pattern='^my_orders$'))
-    application.add_handler(CallbackQueryHandler(show_order_details, pattern='^order_details_'))
     application.add_handler(CallbackQueryHandler(show_info, pattern='^info$'))
     application.add_handler(CallbackQueryHandler(show_map, pattern='^show_map$'))
+    application.add_handler(CallbackQueryHandler(show_legal, pattern='^legal$'))
+    application.add_handler(CallbackQueryHandler(show_contacts, pattern='^contacts$'))
     application.add_handler(CallbackQueryHandler(show_language_selection, pattern='^language$'))
     application.add_handler(CallbackQueryHandler(change_language, pattern='^lang_'))
-    application.add_handler(CallbackQueryHandler(admin_confirm_order, pattern='^admin_confirm_'))
-    application.add_handler(CallbackQueryHandler(admin_cancel_order, pattern='^admin_cancel_'))
+    
+    # Admin handlers
+    application.add_handler(CallbackQueryHandler(admin_panel, pattern='^admin$'))
+    application.add_handler(CallbackQueryHandler(admin_stats, pattern='^admin_stats$'))
+    application.add_handler(CallbackQueryHandler(admin_toggle, pattern='^admin_toggle$'))
+    application.add_handler(CallbackQueryHandler(toggle_product, pattern='^toggle_\d+$'))
+    application.add_handler(CallbackQueryHandler(admin_delete, pattern='^admin_delete$'))
+    application.add_handler(CallbackQueryHandler(delete_product, pattern='^delete_\d+$'))
     
     # Start bot
     logger.info("Bot started!")

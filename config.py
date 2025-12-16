@@ -6,6 +6,7 @@ load_dotenv()
 # Bot Configuration
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 ADMIN_ID = int(os.getenv('ADMIN_ID'))
+OWNER_ID = int(os.getenv('OWNER_ID', ADMIN_ID))  # Thai owner ID
 
 # Shop Information
 SHOP_NAME = "spirit420"
@@ -21,24 +22,24 @@ WORKING_HOURS_RU = "Пн-Вс: 10:00 - 21:00"
 WORKING_HOURS_EN = "Mon-Sun: 10:00 AM - 9:00 PM"
 WORKING_HOURS_TH = "จันทร์-อาทิตย์: 10:00 - 21:00"
 
-# Delivery Zones (in THB)
-DELIVERY_ZONES = {
-    'zone1': {'name_ru': 'Пхукет-таун центр', 'name_en': 'Phuket Town Center', 'name_th': 'ภูเก็ตทาวน์', 'price': 0},
-    'zone2': {'name_ru': 'Чалонг, Раваи (начало)', 'name_en': 'Chalong, Rawai (near)', 'name_th': 'ฉลอง ราไวย์', 'price': 100},
-    'zone3': {'name_ru': 'Патонг, Карон, Ката', 'name_en': 'Patong, Karon, Kata', 'name_th': 'ป่าตอง กะรน กะตะ', 'price': 150},
-    'zone4': {'name_ru': 'Банг Тао, Сурин, Камала', 'name_en': 'Bang Tao, Surin, Kamala', 'name_th': 'บางเทา สุรินทร์ กมลา', 'price': 200},
-    'zone5': {'name_ru': 'Другие районы', 'name_en': 'Other areas', 'name_th': 'พื้นที่อื่นๆ', 'price': 250}
+# License Info
+LICENSE_INFO_RU = "Лицензия: [номер лицензии]"
+LICENSE_INFO_EN = "License: [license number]"
+LICENSE_INFO_TH = "ใบอนุญาต: [เลขที่ใบอนุญาต]"
+
+# Contact Info
+LINE_ID = os.getenv('LINE_ID', '@spirit420')
+WHATSAPP = os.getenv('WHATSAPP', '+66611483677')
+
+# Product Categories
+CATEGORIES = {
+    'sorts': {'ru': '🌱 Сорта', 'en': '🌱 Sorts', 'th': '🌱 สายพันธุ์'},
+    'joints': {'ru': '🚬 Преролы', 'en': '🚬 Prerolled Joints', 'th': '🚬 พรีโรล'}
 }
 
-# Minimum Order
-MIN_ORDER_AMOUNT = 500
-
-# Order Statuses
-ORDER_STATUS = {
-    'new': {'emoji': '⏳', 'ru': 'Принят', 'en': 'Received', 'th': 'ได้รับแล้ว'},
-    'confirmed': {'emoji': '✅', 'ru': 'Подтвержден', 'en': 'Confirmed', 'th': 'ยืนยันแล้ว'},
-    'preparing': {'emoji': '📦', 'ru': 'Готовится', 'en': 'Preparing', 'th': 'กำลังเตรียม'},
-    'delivery': {'emoji': '🚗', 'ru': 'В пути', 'en': 'On the way', 'th': 'กำลังจัดส่ง'},
-    'completed': {'emoji': '✔️', 'ru': 'Доставлен', 'en': 'Delivered', 'th': 'จัดส่งแล้ว'},
-    'cancelled': {'emoji': '❌', 'ru': 'Отменен', 'en': 'Cancelled', 'th': 'ยกเลิกแล้ว'}
+# Product Types
+PRODUCT_TYPES = {
+    'indica': {'emoji': '🌙', 'ru': 'Indica', 'en': 'Indica', 'th': 'อินดิกา'},
+    'sativa': {'emoji': '☀️', 'ru': 'Sativa', 'en': 'Sativa', 'th': 'ซาติวา'},
+    'hybrid': {'emoji': '🌓', 'ru': 'Hybrid', 'en': 'Hybrid', 'th': 'ไฮบริด'}
 }
