@@ -14,18 +14,18 @@ SHOP_PHONE = os.getenv('SHOP_PHONE')
 SHOP_ADDRESS_RU = os.getenv('SHOP_ADDRESS_RU')
 SHOP_ADDRESS_EN = os.getenv('SHOP_ADDRESS_EN')
 SHOP_ADDRESS_TH = os.getenv('SHOP_ADDRESS_TH')
-SHOP_LAT = float(os.getenv('SHOP_LAT', '7.8804'))
-SHOP_LON = float(os.getenv('SHOP_LON', '98.3923'))
+SHOP_LAT = float(os.getenv('SHOP_LAT', '7.884528'))
+SHOP_LON = float(os.getenv('SHOP_LON', '98.365056'))
 
 # Working Hours
 WORKING_HOURS_RU = "Пн-Вс: 10:00 - 21:00"
 WORKING_HOURS_EN = "Mon-Sun: 10:00 AM - 9:00 PM"
 WORKING_HOURS_TH = "จันทร์-อาทิตย์: 10:00 - 21:00"
 
-# License Info
-LICENSE_INFO_RU = "Лицензия: [номер лицензии]"
-LICENSE_INFO_EN = "License: [license number]"
-LICENSE_INFO_TH = "ใบอนุญาต: [เลขที่ใบอนุญาต]"
+# Shop Description
+SHOP_DESCRIPTION_RU = "Лицензированный магазин каннабиса, Пхукет"
+SHOP_DESCRIPTION_EN = "Licensed cannabis shop, Phuket"
+SHOP_DESCRIPTION_TH = "ร้านกัญชาที่ได้รับใบอนุญาต ภูเก็ต"
 
 # Contact Info
 LINE_ID = os.getenv('LINE_ID', '@spirit420')

@@ -22,7 +22,7 @@ TEXTS = {
         'catalog': '🌿 Каталог продукции',
         'info': '📍 Информация о магазине',
         'legal': 'ℹ️ Правовая информация',
-        'contacts': '📞 Контакты',
+        'contacts': '📞 Контакты для доставки',
         'language': '🌐 Язык',
         'back': '⬅️ Назад',
         
@@ -30,6 +30,7 @@ TEXTS = {
         'select_category': '🌿 Выберите категорию:',
         'sorts': '🌱 Сорта',
         'joints': '🚬 Преролы',
+        'select_sort_type': '🌱 Выберите тип сорта:',
         'catalog_disclaimer': 'Ниже представлен ассортимент магазина исключительно для ознакомления.\n\nНаличие и условия уточняются лично в магазине.',
         'no_products': 'В этой категории пока нет товаров',
         
@@ -54,9 +55,7 @@ TEXTS = {
 🕐 Часы работы:
 {hours}
 
-📜 {license}
-
-Деятельность осуществляется в соответствии с законодательством Таиланда.''',
+{description}''',
         
         'show_map': '📍 Показать на карте',
         
@@ -70,19 +69,12 @@ TEXTS = {
 • Вся информация предоставляется исключительно в ознакомительных целях''',
         
         # Contacts
-        'contacts_info': '''📞 Контакты
+        'contacts_info': '''📞 Контакты для доставки
 
-По всем вопросам вы можете связаться с магазином напрямую:
-
-📱 Телефон: {phone}
-💬 LINE: {line}
-📲 WhatsApp: {whatsapp}
-
-Мы всегда рады ответить на ваши вопросы!''',
+Свяжитесь с нами удобным способом:''',
         
         'contact_line': '💬 LINE',
         'contact_whatsapp': '📲 WhatsApp',
-        'contact_phone': '📱 Позвонить',
         
         # Language
         'select_language': '🌐 Выберите язык / Select language / เลือกภาษา',
@@ -155,7 +147,7 @@ By continuing to use this bot, you confirm that you understand and accept these 
         'catalog': '🌿 Product Catalog',
         'info': '📍 Store Information',
         'legal': 'ℹ️ Legal Information',
-        'contacts': '📞 Contacts',
+        'contacts': '📞 Contacts for Delivery',
         'language': '🌐 Language',
         'back': '⬅️ Back',
         
@@ -163,6 +155,7 @@ By continuing to use this bot, you confirm that you understand and accept these 
         'select_category': '🌿 Select category:',
         'sorts': '🌱 Sorts',
         'joints': '🚬 Prerolled Joints',
+        'select_sort_type': '🌱 Select sort type:',
         'catalog_disclaimer': 'The following product list is provided for reference only.\n\nAvailability and conditions are confirmed in person at the store.',
         'no_products': 'No products in this category yet',
         
@@ -187,9 +180,7 @@ Status: ✅ Available in-store''',
 🕐 Working hours:
 {hours}
 
-📜 {license}
-
-The store operates in compliance with Thai law.''',
+{description}''',
         
         'show_map': '📍 Show on Map',
         
@@ -203,19 +194,12 @@ The store operates in compliance with Thai law.''',
 • All information is provided for informational purposes only''',
         
         # Contacts
-        'contacts_info': '''📞 Contacts
+        'contacts_info': '''📞 Contacts for Delivery
 
-For any inquiries, please contact the store directly:
-
-📱 Phone: {phone}
-💬 LINE: {line}
-📲 WhatsApp: {whatsapp}
-
-We're always happy to answer your questions!''',
+Contact us via:''',
         
         'contact_line': '💬 LINE',
         'contact_whatsapp': '📲 WhatsApp',
-        'contact_phone': '📱 Call',
         
         # Language
         'select_language': '🌐 Выберите язык / Select language / เลือกภาษา',
@@ -288,7 +272,7 @@ Choose an action:''',
         'catalog': '🌿 รายการสินค้า',
         'info': '📍 ข้อมูลร้านค้า',
         'legal': 'ℹ️ ข้อมูลทางกฎหมาย',
-        'contacts': '📞 ติดต่อ',
+        'contacts': '📞 ติดต่อเพื่อการจัดส่ง',
         'language': '🌐 ภาษา',
         'back': '⬅️ กลับ',
         
@@ -296,6 +280,7 @@ Choose an action:''',
         'select_category': '🌿 เลือกหมวดหมู่:',
         'sorts': '🌱 สายพันธุ์',
         'joints': '🚬 พรีโรล',
+        'select_sort_type': '🌱 เลือกประเภทสายพันธุ์:',
         'catalog_disclaimer': 'รายการสินค้าด้านล่างจัดทำขึ้น เพื่อการอ้างอิงเท่านั้น\n\nสินค้าและเงื่อนไขสามารถตรวจสอบได้ ที่ร้านโดยตรง',
         'no_products': 'ยังไม่มีสินค้าในหมวดหมู่นี้',
         
@@ -320,9 +305,7 @@ Choose an action:''',
 🕐 เวลาทำการ:
 {hours}
 
-📜 {license}
-
-ร้านค้าดำเนินการตามกฎหมายไทย''',
+{description}''',
         
         'show_map': '📍 แสดงบนแผนที่',
         
@@ -336,19 +319,12 @@ Choose an action:''',
 • ข้อมูลทั้งหมดใช้เพื่อการให้ข้อมูลเท่านั้น''',
         
         # Contacts
-        'contacts_info': '''📞 ติดต่อ
+        'contacts_info': '''📞 ติดต่อเพื่อการจัดส่ง
 
-หากมีข้อสงสัย กรุณา ติดต่อร้านค้าโดยตรง:
-
-📱 โทรศัพท์: {phone}
-💬 LINE: {line}
-📲 WhatsApp: {whatsapp}
-
-เรายินดีตอบคำถามของคุณเสมอ!''',
+ติดต่อเราผ่าน:''',
         
         'contact_line': '💬 LINE',
         'contact_whatsapp': '📲 WhatsApp',
-        'contact_phone': '📱 โทร',
         
         # Language
         'select_language': '🌐 Выберите язык / Select language / เลือกภาษา',

@@ -47,6 +47,16 @@ def get_category_keyboard(lang: str):
     ]
     return InlineKeyboardMarkup(keyboard)
 
+def get_sorts_type_keyboard(lang: str):
+    """Generate sorts type selection keyboard"""
+    keyboard = [
+        [InlineKeyboardButton('☀️ Sativa', callback_data='type_sativa')],
+        [InlineKeyboardButton('🌙 Indica', callback_data='type_indica')],
+        [InlineKeyboardButton('🌓 Hybrid', callback_data='type_hybrid')],
+        [InlineKeyboardButton(get_text(lang, 'back'), callback_data='catalog')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
 def get_language_keyboard():
     """Generate language selection keyboard"""
     keyboard = [
@@ -84,11 +94,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Add user to database
     db.add_user(user.id, user.username, user.first_name, user.last_name)
     
+    # Check if user has selected language
+    lang = get_user_lang(update)
+    
+    # If no language selected yet, show language selection first
+    if not db.has_selected_language(user.id):
+        await update.message.reply_text(
+            '🌿 Welcome to spirit420!\n🌐 Please select your language:\n\nПожалуйста, выберите язык:\nกรุณาเลือกภาษา:',
+            reply_markup=get_language_keyboard()
+        )
+        return
+    
     # Check if user accepted disclaimer
     if not db.has_accepted_disclaimer(user.id):
         return await show_disclaimer(update, context)
-    
-    lang = get_user_lang(update)
     
     await update.message.reply_text(
         get_text(lang, 'welcome'),
@@ -168,13 +187,22 @@ async def show_catalog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def show_category_products(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show products in selected category"""
+    """Show products in selected category or type selection for sorts"""
     query = update.callback_query
     await query.answer()
     
     lang = get_user_lang(update)
     category = query.data.split('_')[1]  # cat_sorts -> sorts
     
+    # If sorts, show type selection
+    if category == 'sorts':
+        await query.edit_message_text(
+            get_text(lang, 'select_sort_type'),
+            reply_markup=get_sorts_type_keyboard(lang)
+        )
+        return
+    
+    # For joints, show all products
     products = db.get_products_by_category(category)
     
     if not products:
@@ -202,6 +230,44 @@ async def show_category_products(update: Update, context: ContextTypes.DEFAULT_T
         ]])
     )
 
+async def show_sorts_by_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show sorts filtered by type"""
+    query = update.callback_query
+    await query.answer()
+    
+    lang = get_user_lang(update)
+    sort_type = query.data.split('_')[1]  # type_sativa -> sativa
+    
+    products = db.get_products_by_type('sorts', sort_type)
+    
+    if not products:
+        await query.edit_message_text(
+            get_text(lang, 'no_products'),
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton(get_text(lang, 'back'), callback_data='cat_sorts')
+            ]])
+        )
+        return
+    
+    # Show products list
+    type_info = PRODUCT_TYPES.get(sort_type, {})
+    type_emoji = type_info.get('emoji', '🌿')
+    type_name = type_info.get(lang, sort_type)
+    
+    await query.edit_message_text(f"{type_emoji} {type_name}\n\n{get_text(lang, 'catalog_disclaimer')}")
+    
+    for product in products:
+        text = format_product_card(product, lang)
+        await query.message.reply_text(text)
+    
+    # Back button
+    await query.message.reply_text(
+        '—',
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton(get_text(lang, 'back'), callback_data='cat_sorts')
+        ]])
+    )
+
 # Shop Info Handler
 async def show_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show shop information"""
@@ -213,20 +279,20 @@ async def show_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if lang == 'ru':
         address = SHOP_ADDRESS_RU
         hours = WORKING_HOURS_RU
-        license_info = LICENSE_INFO_RU
+        description = SHOP_DESCRIPTION_RU
     elif lang == 'en':
         address = SHOP_ADDRESS_EN
         hours = WORKING_HOURS_EN
-        license_info = LICENSE_INFO_EN
+        description = SHOP_DESCRIPTION_EN
     else:
         address = SHOP_ADDRESS_TH
         hours = WORKING_HOURS_TH
-        license_info = LICENSE_INFO_TH
+        description = SHOP_DESCRIPTION_TH
     
     text = get_text(lang, 'shop_info',
                    address=address,
                    hours=hours,
-                   license=license_info)
+                   description=description)
     
     keyboard = [
         [InlineKeyboardButton(get_text(lang, 'show_map'), callback_data='show_map')],
@@ -273,15 +339,11 @@ async def show_contacts(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     lang = get_user_lang(update)
     
-    text = get_text(lang, 'contacts_info',
-                   phone=SHOP_PHONE,
-                   line=LINE_ID,
-                   whatsapp=WHATSAPP)
+    text = get_text(lang, 'contacts_info')
     
     keyboard = [
-        [InlineKeyboardButton(get_text(lang, 'contact_line'), url=f'https://line.me/ti/p/{LINE_ID}')],
-        [InlineKeyboardButton(get_text(lang, 'contact_whatsapp'), url=f'https://wa.me/{WHATSAPP.replace("+", "")}')],
-        [InlineKeyboardButton(get_text(lang, 'contact_phone'), url=f'tel:{SHOP_PHONE}')],
+        [InlineKeyboardButton(get_text(lang, 'contact_whatsapp'), url=f'https://wa.me/{WHATSAPP.replace("+", "").replace(" ", "")}')],
+        [InlineKeyboardButton(get_text(lang, 'contact_line'), url=f'https://line.me/R/ti/p/{LINE_ID.replace("@", "%40")}')],
         [InlineKeyboardButton(get_text(lang, 'back'), callback_data='main_menu')]
     ]
     
@@ -304,7 +366,12 @@ async def change_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     
     new_lang = query.data.split('_')[1]
-    db.set_user_language(update.effective_user.id, new_lang)
+    user_id = update.effective_user.id
+    db.set_user_language(user_id, new_lang)
+    
+    # If user hasn't accepted disclaimer yet, show it after language selection
+    if not db.has_accepted_disclaimer(user_id):
+        return await show_disclaimer(update, context)
     
     await query.edit_message_text(
         get_text(new_lang, 'language_changed'),
@@ -614,6 +681,7 @@ def main():
     application.add_handler(CallbackQueryHandler(main_menu, pattern='^main_menu$'))
     application.add_handler(CallbackQueryHandler(show_catalog, pattern='^catalog$'))
     application.add_handler(CallbackQueryHandler(show_category_products, pattern='^cat_'))
+    application.add_handler(CallbackQueryHandler(show_sorts_by_type, pattern='^type_'))
     application.add_handler(CallbackQueryHandler(show_info, pattern='^info$'))
     application.add_handler(CallbackQueryHandler(show_map, pattern='^show_map$'))
     application.add_handler(CallbackQueryHandler(show_legal, pattern='^legal$'))
