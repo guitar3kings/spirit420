@@ -18,9 +18,9 @@ SHOP_LAT = float(os.getenv('SHOP_LAT', '7.884528'))
 SHOP_LON = float(os.getenv('SHOP_LON', '98.365056'))
 
 # Working Hours
-WORKING_HOURS_RU = "Пн-Вс: 10:00 - 21:00"
-WORKING_HOURS_EN = "Mon-Sun: 10:00 AM - 9:00 PM"
-WORKING_HOURS_TH = "จันทร์-อาทิตย์: 10:00 - 21:00"
+WORKING_HOURS_RU = "Пн-Вс: 11:00 - 02:00"
+WORKING_HOURS_EN = "Mon-Sun: 11:00 AM - 2:00 AM"
+WORKING_HOURS_TH = "จันทร์-อาทิตย์: 11:00 - 02:00"
 
 # Shop Description
 SHOP_DESCRIPTION_RU = "Лицензированный магазин каннабиса, Пхукет"
