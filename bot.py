@@ -94,11 +94,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Add user to database
     db.add_user(user.id, user.username, user.first_name, user.last_name)
     
-    # Check if user has selected language
     lang = get_user_lang(update)
     
-    # If no language selected yet, show language selection first
-    if not db.has_selected_language(user.id):
+    # If language is default 'en' and user hasn't accepted disclaimer, show language selection
+    if lang == 'en' and not db.has_accepted_disclaimer(user.id):
         await update.message.reply_text(
             '🌿 Welcome to spirit420!\n🌐 Please select your language:\n\nПожалуйста, выберите язык:\nกรุณาเลือกภาษา:',
             reply_markup=get_language_keyboard()

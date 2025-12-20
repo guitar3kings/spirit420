@@ -173,6 +173,23 @@ class Database:
         
         return products
     
+    def get_products_by_type(self, category, product_type):
+        """Get all active products in a category filtered by type"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT id, name, product_type, thc_content, price, description, special_offer
+            FROM products
+            WHERE category = ? AND product_type = ? AND is_active = 1
+            ORDER BY price DESC, name
+        ''', (category, product_type))
+        
+        products = cursor.fetchall()
+        conn.close()
+        
+        return products
+    
     def get_all_products(self, include_hidden=False):
         """Get all products (for admin)"""
         conn = self.get_connection()
