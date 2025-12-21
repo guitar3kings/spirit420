@@ -31,8 +31,8 @@ def get_main_keyboard(lang: str):
     """Generate main menu keyboard"""
     keyboard = [
         [InlineKeyboardButton(get_text(lang, 'catalog'), callback_data='catalog')],
+        [InlineKeyboardButton('🛒 ' + get_text(lang, 'order_online'), url='https://spirit420website.vercel.app')],  # ← НОВАЯ КНОПКА!
         [InlineKeyboardButton(get_text(lang, 'info'), callback_data='info')],
-        [InlineKeyboardButton(get_text(lang, 'legal'), callback_data='legal')],
         [InlineKeyboardButton(get_text(lang, 'contacts'), callback_data='contacts')],
         [InlineKeyboardButton(get_text(lang, 'language'), callback_data='language')]
     ]
