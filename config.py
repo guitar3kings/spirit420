@@ -9,7 +9,7 @@ ADMIN_ID = int(os.getenv('ADMIN_ID', '393004597'))
 
 # Website URL (ЗАМЕНИ на свой URL от Vercel!)
 # Пример: https://spirit420-website-abc123.vercel.app
-WEBSITE_URL = os.getenv('WEBSITE_URL', 'https://spirit420-website.vercel.app')
+WEBSITE_URL = os.getenv('WEBSITE_URL', 'https://spirit420website.vercel.app/')
 
 # Shop Information
 SHOP_NAME = "spirit420"
