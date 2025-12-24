@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
 
 # Conversation states for admin
 (ADMIN_ADD_NAME, ADMIN_ADD_CATEGORY, ADMIN_ADD_TYPE, ADMIN_ADD_THC,
- ADMIN_ADD_PRICE, ADMIN_ADD_DESC, ADMIN_ADD_SPECIAL) = range(7)
+ ADMIN_ADD_PRICE, ADMIN_ADD_DESC, ADMIN_ADD_SPECIAL,
+ ADMIN_EDIT_SELECT, ADMIN_EDIT_FIELD, ADMIN_EDIT_VALUE) = range(10)
 
 # Helper Functions
 def get_user_lang(update: Update) -> str:
@@ -25,13 +26,13 @@ def get_user_lang(update: Update) -> str:
 
 def is_admin(user_id: int) -> bool:
     """Check if user is admin"""
-    return user_id in [ADMIN_ID, OWNER_ID]
+    return user_id == ADMIN_ID
 
 def get_main_keyboard(lang: str):
     """Generate main menu keyboard"""
     keyboard = [
         [InlineKeyboardButton(get_text(lang, 'catalog'), callback_data='catalog')],
-        [InlineKeyboardButton('🛒 ' + get_text(lang, 'order_online'), url='https://spirit420website.vercel.app')],  # ← НОВАЯ КНОПКА!
+        [InlineKeyboardButton('🛒 ' + get_text(lang, 'order_online'), url=WEBSITE_URL)],
         [InlineKeyboardButton(get_text(lang, 'info'), callback_data='info')],
         [InlineKeyboardButton(get_text(lang, 'contacts'), callback_data='contacts')],
         [InlineKeyboardButton(get_text(lang, 'language'), callback_data='language')]
@@ -86,7 +87,8 @@ def format_product_card(product, lang):
                    special=special_text,
                    description=desc_text)
 
-# Command Handlers
+# ============ COMMAND HANDLERS ============
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command"""
     user = update.effective_user
@@ -168,7 +170,8 @@ async def main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=get_main_keyboard(lang)
     )
 
-# Catalog Handlers
+# ============ CATALOG HANDLERS ============
+
 async def show_catalog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show catalog categories"""
     query = update.callback_query
@@ -267,7 +270,8 @@ async def show_sorts_by_type(update: Update, context: ContextTypes.DEFAULT_TYPE)
         ]])
     )
 
-# Shop Info Handler
+# ============ INFO HANDLERS ============
+
 async def show_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show shop information"""
     query = update.callback_query
@@ -315,22 +319,6 @@ async def show_map(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]])
     )
 
-# Legal Info Handler
-async def show_legal(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show legal information"""
-    query = update.callback_query
-    await query.answer()
-    
-    lang = get_user_lang(update)
-    
-    keyboard = [[InlineKeyboardButton(get_text(lang, 'back'), callback_data='main_menu')]]
-    
-    await query.edit_message_text(
-        get_text(lang, 'legal_info'),
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-# Contacts Handler
 async def show_contacts(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show contact information"""
     query = update.callback_query
@@ -348,7 +336,8 @@ async def show_contacts(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
-# Language Handler
+# ============ LANGUAGE HANDLER ============
+
 async def show_language_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show language selection"""
     query = update.callback_query
@@ -377,13 +366,17 @@ async def change_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=get_main_keyboard(new_lang)
     )
 
-# Admin Panel
+# ============ ADMIN PANEL ============
+
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show admin panel"""
     user_id = update.effective_user.id
     
     if not is_admin(user_id):
-        await update.message.reply_text(get_text(get_user_lang(update), 'access_denied'))
+        if update.message:
+            await update.message.reply_text(get_text(get_user_lang(update), 'access_denied'))
+        else:
+            await update.callback_query.answer(get_text(get_user_lang(update), 'access_denied'), show_alert=True)
         return
     
     lang = get_user_lang(update)
@@ -394,6 +387,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton(get_text(lang, 'delete_product'), callback_data='admin_delete')],
         [InlineKeyboardButton(get_text(lang, 'toggle_product'), callback_data='admin_toggle')],
         [InlineKeyboardButton(get_text(lang, 'view_stats'), callback_data='admin_stats')],
+        [InlineKeyboardButton(get_text(lang, 'view_orders'), callback_data='admin_orders')],
         [InlineKeyboardButton(get_text(lang, 'back'), callback_data='main_menu')]
     ]
     
@@ -423,7 +417,38 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = get_text(lang, 'stats',
                    users=stats['users'],
                    products=stats['products'],
-                   views=stats['views'])
+                   views=stats['views'],
+                   orders=stats['web_orders'],
+                   revenue=stats['revenue'])
+    
+    keyboard = [[InlineKeyboardButton(get_text(lang, 'back'), callback_data='admin')]]
+    
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show recent web orders"""
+    query = update.callback_query
+    await query.answer()
+    
+    if not is_admin(update.effective_user.id):
+        return
+    
+    lang = get_user_lang(update)
+    orders = db.get_web_orders(limit=10)
+    
+    if not orders:
+        await query.edit_message_text(
+            get_text(lang, 'no_orders'),
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton(get_text(lang, 'back'), callback_data='admin')
+            ]])
+        )
+        return
+    
+    text = get_text(lang, 'recent_orders') + "\n\n"
+    for order in orders:
+        order_id, name, phone, total, status, created_at = order
+        text += f"#{order_id}\n👤 {name}\n📱 {phone}\n💰 {total}\n📅 {created_at}\n\n"
     
     keyboard = [[InlineKeyboardButton(get_text(lang, 'back'), callback_data='admin')]]
     
@@ -509,7 +534,8 @@ async def delete_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await admin_panel(update, context)
 
-# Add Product Conversation
+# ============ ADD PRODUCT CONVERSATION ============
+
 async def admin_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start adding product"""
     query = update.callback_query
@@ -683,7 +709,6 @@ def main():
     application.add_handler(CallbackQueryHandler(show_sorts_by_type, pattern='^type_'))
     application.add_handler(CallbackQueryHandler(show_info, pattern='^info$'))
     application.add_handler(CallbackQueryHandler(show_map, pattern='^show_map$'))
-    application.add_handler(CallbackQueryHandler(show_legal, pattern='^legal$'))
     application.add_handler(CallbackQueryHandler(show_contacts, pattern='^contacts$'))
     application.add_handler(CallbackQueryHandler(show_language_selection, pattern='^language$'))
     application.add_handler(CallbackQueryHandler(change_language, pattern='^lang_'))
@@ -691,6 +716,7 @@ def main():
     # Admin handlers
     application.add_handler(CallbackQueryHandler(admin_panel, pattern='^admin$'))
     application.add_handler(CallbackQueryHandler(admin_stats, pattern='^admin_stats$'))
+    application.add_handler(CallbackQueryHandler(admin_orders, pattern='^admin_orders$'))
     application.add_handler(CallbackQueryHandler(admin_toggle, pattern='^admin_toggle$'))
     application.add_handler(CallbackQueryHandler(toggle_product, pattern='^toggle_\d+$'))
     application.add_handler(CallbackQueryHandler(admin_delete, pattern='^admin_delete$'))
